@@ -1,20 +1,38 @@
 {
   "name": "dsh-think-watch",
-  "version": "0.1.0",
-  "description": "Offline analysis of model reasoning traces in DeepSeek Harness sessions: measure thinking length, convergence, and wasted deliberation.",
+  "version": "0.2.0",
+  "description": "Teach a DeepSeek Harness agent to reason well, and inspect what it actually thought. Host plugin plus an offline trace analyzer.",
   "type": "module",
   "license": "MIT",
+  "author": {
+    "name": "Orliba",
+    "url": "https://github.com/Orliba"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Orliba/dsh-think-watch.git"
+  },
+  "homepage": "https://github.com/Orliba/dsh-think-watch#readme",
+  "bugs": {
+    "url": "https://github.com/Orliba/dsh-think-watch/issues"
+  },
   "bin": {
     "think-watch": "./bin/cli.mjs"
   },
   "exports": {
     ".": "./src/index.mjs",
+    "./plugin": "./plugin/index.mjs",
     "./metrics": "./src/metrics.mjs",
-    "./session": "./src/session.mjs"
+    "./session": "./src/session.mjs",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
   },
   "files": [
     "bin",
     "src",
+    "plugin",
+    "docs",
+    "cordis.patch.yml",
     "README.md",
     "LICENSE"
   ],
@@ -23,15 +41,26 @@
   },
   "keywords": [
     "dsh",
+    "dsh-plugin",
     "deepseek-harness",
     "reasoning",
     "chain-of-thought",
     "cot",
+    "system-prompt",
     "analysis",
     "observability"
   ],
+  "dsh": {
+    "engines": {
+      "dsh": ">=0.2.0-rc.1"
+    },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
   "scripts": {
-    "start": "node bin/cli.mjs"
+    "start": "node bin/cli.mjs",
+    "check": "node --check bin/cli.mjs && node --check plugin/index.mjs && node --check plugin/rule.mjs"
   },
   "dependencies": {}
 }

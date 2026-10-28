@@ -1,0 +1,12 @@
+# dsh bundle layer: mount the think-watch host plugin.
+#
+# Disable without uninstalling: set `enabled: false` in the config block below,
+# or add a patch row targeting `- id: think-watch` with `disabled: true`.
+- insert:
+    - id: think-watch
+      name: dsh-think-watch/plugin
+      config:
+        enabled: true
+        # maxChars caps the rendered rule so a future edit cannot quietly
+        # inflate every request. The default rule sits well under this.
+        maxChars: 2000
