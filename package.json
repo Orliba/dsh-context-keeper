@@ -1,0 +1,37 @@
+{
+  "name": "dsh-think-watch",
+  "version": "0.1.0",
+  "description": "Offline analysis of model reasoning traces in DeepSeek Harness sessions: measure thinking length, convergence, and wasted deliberation.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "think-watch": "./bin/cli.mjs"
+  },
+  "exports": {
+    ".": "./src/index.mjs",
+    "./metrics": "./src/metrics.mjs",
+    "./session": "./src/session.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "reasoning",
+    "chain-of-thought",
+    "cot",
+    "analysis",
+    "observability"
+  ],
+  "scripts": {
+    "start": "node bin/cli.mjs"
+  },
+  "dependencies": {}
+}

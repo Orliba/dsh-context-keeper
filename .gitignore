@@ -1,0 +1,21 @@
+# Analysis output (contains real session text, never commit it)
+samples-run1/
+think-watch-samples/
+*.samples/
+review/
+
+# Node
+node_modules/
+npm-debug.log*
+pnpm-debug.log*
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local scratch
+*.local
+.tmp/

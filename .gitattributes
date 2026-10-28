@@ -1,0 +1,9 @@
+# Normalize line endings so the repo behaves the same on Windows and elsewhere.
+* text=auto eol=lf
+
+# Shell entry point must keep LF or it will not run.
+bin/cli.mjs text eol=lf
+
+# Binary fixtures, if any ever appear.
+*.zstd binary
+*.png binary
