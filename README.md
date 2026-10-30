@@ -12,6 +12,22 @@ killed it. See [Why this does not reduce thinking](#why-this-does-not-reduce-thi
 
 ---
 
+## Compatibility
+
+- **DeepSeek Harness `>= 0.2.0-rc.1`** — declared in `package.json` under `dsh.engines.dsh`.
+- **Node.js `>= 22`** — the plugin uses the built-in `zlib.zstdDecompressSync`.
+- **Verified on:** DSH Desktop **44.7.0** (Windows) — the context badge mounts and
+  renders in the turn footer, and `/context-watch` / `/handoff` run against local
+  session files.
+
+The plugin relies on public DSH APIs: `systemPrompt.section`, `commands.register`,
+the `conversation.chat.turnTail` / `conversation.composer.dock` seats, and the
+`contextPressure` projection. If a future build changes those, the host half warns
+once and registers nothing instead of taking the host down; the client half simply
+renders nothing when its projection is unavailable.
+
+---
+
 ## What v0.4 adds: a context badge & reminder
 
 **A colour dot in every turn's footer** (the `conversation.chat.turnTail`
