@@ -1,8 +1,9 @@
 # Analysis output (contains real session text, never commit it)
 samples-run1/
-think-watch-samples/
+context-keeper-samples/
 *.samples/
 review/
+handoff/
 
 # Node
 node_modules/
@@ -19,3 +20,9 @@ desktop.ini
 # Local scratch
 *.local
 .tmp/
+
+# Local install/guardian backups (profile snapshots — never publish)
+_install-backup-*/
+
+# Plugin runtime output (handoff packages written into a workspace)
+.context-keeper/

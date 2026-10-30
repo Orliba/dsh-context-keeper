@@ -1,5 +1,5 @@
 /**
- * Activation smoke test.
+ * Activation smoke test (v3).
  *
  * The unit test fakes the context, so it cannot reproduce what cordis does at
  * activation. Two distinct failures were hit during development, and this file
@@ -9,7 +9,8 @@
  *   2. declared but absent -> hangs    "waiting for service: X"
  *
  * It also pins the lesson behind failure 2: `console` is a Node global, not a
- * harness service, so it must never appear in `inject`.
+ * harness service, so it must never appear in `inject`. v3 adds `commands`; both
+ * `systemPrompt` and `commands` are real services in the shipped base.
  *
  * Run: node test/activation.test.mjs
  */
@@ -29,19 +30,19 @@ function check(label, condition, detail = '') {
 
 /**
  * A context that mimics cordis service access.
- *
  * `provided` lists services that exist; `injected` lists what the plugin
  * declared. Reading something provided but not injected throws; reading
- * something injected but not provided is reported as pending, which is what
- * makes a real entry hang forever.
+ * something injected but not provided is reported as pending.
  */
-function gatedContext(injected, { withSection = true, provided = ['systemPrompt'] } = {}) {
+function gatedContext(injected, { withSection = true, provided = ['systemPrompt', 'commands'] } = {}) {
   const calls = []
+  const cmdCalls = []
   const pending = []
   const services = {
     systemPrompt: withSection
       ? { section: (arg) => (calls.push(arg), () => {}) }
       : { getSectionOrder: () => 650 },
+    commands: { register: (d) => (cmdCalls.push(d), () => {}) },
   }
   const allowed = new Set(injected)
   const ctx = new Proxy(
@@ -51,6 +52,10 @@ function gatedContext(injected, { withSection = true, provided = ['systemPrompt'
         if (typeof prop !== 'string') return undefined
         if (prop in services) {
           if (!allowed.has(prop)) throw new Error(`cannot get property "${prop}" without inject`)
+          if (!provided.includes(prop)) {
+            pending.push(prop)
+            return undefined
+          }
           return services[prop]
         }
         if (allowed.has(prop) && !provided.includes(prop)) {
@@ -61,7 +66,7 @@ function gatedContext(injected, { withSection = true, provided = ['systemPrompt'
       },
     },
   )
-  return { ctx, calls, pending }
+  return { ctx, calls, cmdCalls, pending }
 }
 
 /** Capture warnings without touching the real console. */
@@ -76,12 +81,12 @@ function captureWarnings(fn) {
   }
 }
 
-console.log('think-watch activation')
+console.log('context-keeper activation (v3)')
 
 // 1. Activate exactly as the harness does.
 {
   const injected = Array.isArray(plugin.inject) ? plugin.inject : []
-  const { ctx, calls } = gatedContext(injected)
+  const { ctx, calls, cmdCalls } = gatedContext(injected)
   let threw = null
   try {
     plugin.apply(ctx, {})
@@ -89,16 +94,17 @@ console.log('think-watch activation')
     threw = e
   }
   check('activates with its own declared inject', threw === null, threw?.message)
-  check('registers the rule on activation', calls.length === 1, `got ${calls.length}`)
+  check('registers both prompt sections on activation', calls.length === 2, `got ${calls.length}`)
+  check('registers both commands on activation', cmdCalls.length === 2, `got ${cmdCalls.length}`)
 }
 
-// 2. The injection list itself. Every name here must be a real harness service;
-//    a wrong name does not fail loudly, it hangs activation silently.
+// 2. The injection list itself. Every name here must be a real harness service.
 {
   const injected = Array.isArray(plugin.inject) ? plugin.inject : []
   check('declares systemPrompt', injected.includes('systemPrompt'), JSON.stringify(injected))
+  check('declares commands', injected.includes('commands'), JSON.stringify(injected))
   check('does NOT declare console (a Node global, not a service)', !injected.includes('console'), JSON.stringify(injected))
-  check('declares nothing extra', injected.length === 1, JSON.stringify(injected))
+  check('declares nothing extra', injected.length === 2, JSON.stringify(injected))
 }
 
 // 3. Failure mode 1: reading an undeclared service throws. The plugin guards
@@ -122,7 +128,7 @@ console.log('think-watch activation')
 // 4. Degradation: no section() must warn via the global console, never throw.
 {
   const injected = Array.isArray(plugin.inject) ? plugin.inject : []
-  const { ctx } = gatedContext(injected, { withSection: false })
+  const { ctx, calls } = gatedContext(injected, { withSection: false })
   let threw = null
   let warnings = []
   try {
@@ -132,12 +138,13 @@ console.log('think-watch activation')
   }
   check('missing section() degrades without throwing', threw === null, threw?.message)
   check('missing section() warns exactly once', warnings.length === 1, `got ${warnings.length}`)
-  check('warning mentions the plugin', String(warnings[0] ?? '').includes('think-watch'))
+  check('warning mentions the plugin', String(warnings[0] ?? '').includes('context-keeper'))
+  check('nothing sectioned when unsupported', calls.length === 0, `got ${calls.length}`)
 }
 
-// 5. Nothing provided at all: quiet, no throw, nothing registered.
+// 5. Nothing provided at all: quiet, no throw, nothing registered, explains both.
 {
-  const { ctx, calls } = gatedContext([], { provided: [] })
+  const { ctx, calls, cmdCalls } = gatedContext([], { provided: [] })
   let threw = null
   let warnings = []
   try {
@@ -146,8 +153,8 @@ console.log('think-watch activation')
     threw = e
   }
   check('no services: degrades without throwing', threw === null, threw?.message)
-  check('no services: registers nothing', calls.length === 0, `got ${calls.length}`)
-  check('no services: still reports why', warnings.length === 1, `got ${warnings.length}`)
+  check('no services: registers nothing', calls.length === 0 && cmdCalls.length === 0, `sections ${calls.length} cmds ${cmdCalls.length}`)
+  check('no services: reports both missing services', warnings.length === 2, `got ${warnings.length}`)
 }
 
 console.log(`\n${checks - failures}/${checks} checks passed`)

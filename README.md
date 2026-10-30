@@ -1,4 +1,4 @@
-# dsh-think-watch
+# dsh-context-keeper
 
 Two things for a [DeepSeek Harness](https://github.com/deepseek-ai) agent:
 
@@ -12,23 +12,82 @@ killed it. See [Why this does not reduce thinking](#why-this-does-not-reduce-thi
 
 ---
 
+## What v0.4 adds: a context badge & reminder
+
+**A colour dot in every turn's footer** (the `conversation.chat.turnTail`
+seat — the same place and shape as dsh-cost-meter's usage chip). It reads the
+official `contextPressure` projection and paints the band — **green (<50%) /
+yellow (50–65%) / orange (65–80%) / red (≥80%)** — with the occupancy percent;
+the action hint ("建议交接" / "该交接了") only appears from orange up. Hover shows
+the full sentence.
+
+**A reminder panel under the input** (`conversation.composer.dock`) that appears
+at **orange/red** only. It states the band and offers an **开新会话** button: it
+calls the client Remote `session.create` + `session.prompt` to make a fresh
+session in the same workspace and seed it with "read the latest handoff package
+under `.context-keeper/handoff` and continue". The new session is a full agent,
+so it reads the package itself — the button does not inline the package (that
+would spend tokens again).
+
+Both are pure presentation plus one explicit user click. They never enter the
+model input on their own and cost zero tokens until you press the button.
+
+> **Honest limits** (verified against this build's source):
+> - DSH's `ReasoningRow` header (above the thinking block) is hard-wired with no
+>   extension seat, so the footer is the nearest always-visible open spot.
+> - After creating the new session the button **cannot switch you to it** — the
+>   slot API has no navigation; open it from the sidebar. The panel says so.
+> - Command **names** must match `^[a-z][a-z0-9_-]*$` and third-party commands
+>   render their name (no separate display `label`), so `/handoff` and
+>   `/context-watch` cannot be shown as `Handoff`/`Context-Watch` in the menu.
+>   Readability goes into the **Chinese one-line description** shown next to
+>   each name instead.
+
+The client half is `plugin/client.js` (declared under `dsh.client` in
+`package.json`); the host half is unchanged. No config path needed.
+
+---
+
+## What v0.3 adds: context budget & handoff
+
+v0.2 taught the agent *how* to think. v0.3 handles *whether the window can hold
+it*. Two human commands, both reading the session file DSH already writes and
+calling a model **zero times**:
+
+- **`/context-watch`** — occupancy, band (green/yellow/orange/red), headroom,
+  growth per turn, and the last compaction's reclaim.
+- **`/handoff`** — write a portable handoff package plus a full faithful archive
+  to `<workspace>/.context-keeper/handoff/`, so a fresh session can continue
+  without re-deriving anything. It reuses DSH's own `compaction/summary`
+  checkpoint as the "early context" (free multi-level distillation) and quotes
+  the recent tail verbatim.
+
+A short, **static** context-budget line is added to the system prompt. It holds
+no numbers on purpose: a changing number in the system prompt would invalidate
+the provider's prefix cache on every request, which costs more than it saves.
+
+The design and the two references it distils are in
+[docs/distill-design-v3.md](docs/distill-design-v3.md).
+
+---
+
 ## Install
 
 ### As a DSH plugin
 
 ```sh
-dsh plugin --profile <your-profile> add dsh-think-watch
+dsh plugin --profile <your-profile> add dsh-context-keeper
 ```
 
 Then restart the profile. The plugin registers one prompt section named
-`think-watch:how-to-reason` at order 650, which places it with the other policy
+`context-keeper:how-to-reason` at order 650, which places it with the other policy
 sections — after the deployment persona, before the tool catalog.
 
 To turn it off without uninstalling, either set `enabled: false` in the config
 block, or add a patch row:
 
 ```yaml
-- id: think-watch
+- id: context-keeper
   disabled: true
 ```
 
@@ -44,8 +103,8 @@ Config options:
 ### As a CLI
 
 ```sh
-git clone https://github.com/Orliba/dsh-think-watch
-cd dsh-think-watch
+git clone https://github.com/Orliba/dsh-context-keeper
+cd dsh-context-keeper
 node bin/cli.mjs --help
 ```
 
@@ -125,6 +184,12 @@ node bin/cli.mjs traces path/to/session.v4.jsonl.zstd --limit 20
 
 # export candidates for human review, with a verdict checkbox per sample
 node bin/cli.mjs samples path/to/session.v4.jsonl.zstd --n 5 --out ./review
+
+# context budget: occupancy, band, headroom, last compaction
+node bin/cli.mjs context path/to/session.v4.jsonl.zstd
+
+# write a portable handoff package + full archive for a session
+node bin/cli.mjs handoff path/to/session.v4.jsonl.zstd --out ./handoff
 ```
 
 `--json` works on `report`, `traces`, and `scan`.
@@ -170,21 +235,27 @@ Two things that silently corrupt any independent analysis:
 
 ```
 bin/cli.mjs         command wiring
-src/session.mjs     session file -> reasoning records
+src/session.mjs     session file -> reasoning records + full detail (users/tools/compactions)
 src/metrics.mjs     pure metric functions
+src/budget.mjs      pure context-budget math (occupancy, bands, ETA)
+src/handoff.mjs     pure handoff packaging + archive rendering
 src/zstd.mjs        multi-frame decoder
 src/render.mjs      table/report formatting
-plugin/index.mjs    the host plugin
+plugin/index.mjs    the host plugin (rule sections + /context-watch + /handoff)
+plugin/client.js    the client half (turnTail context badge, colour dot)
 plugin/rule.mjs     the rule text
-test/               35 assertions across three files
+test/               plugin, budget, handoff, client-badge, activation and e2e prompt tests
 docs/               calibration data and design notes
 ```
 
 Run the tests:
 
 ```sh
+npm test                         # everything below, in order
 node test/plugin.test.mjs        # unit: what gets registered
 node test/activation.test.mjs    # cordis injection rules
+node test/client-badge.test.mjs  # badge math + parity with the host + reminder helpers
+node test/client-boot.test.mjs   # mounts the client bundle under the real loader shape
 ```
 
 ---

@@ -1,12 +1,20 @@
-# dsh bundle layer: mount the think-watch host plugin.
+# dsh bundle layer: mount the context-keeper host plugin.
 #
 # Disable without uninstalling: set `enabled: false` in the config block below,
-# or add a patch row targeting `- id: think-watch` with `disabled: true`.
+# or add a patch row targeting `- id: context-keeper` with `disabled: true`.
 - insert:
-    - id: think-watch
-      name: dsh-think-watch/plugin
+    - id: context-keeper
+      name: dsh-context-keeper
       config:
         enabled: true
         # maxChars caps the rendered rule so a future edit cannot quietly
         # inflate every request. The default rule sits well under this.
         maxChars: 2000
+        # Static "near the limit, hand off" nudge. Static text only - no numbers,
+        # so it never invalidates the prefix cache.
+        contextNudge: true
+        # /context-watch and /handoff.
+        commands: true
+        # Where /handoff writes packages. Default = <current session cwd>/.context-keeper/handoff
+        # (kept inside the workspace so a new session can read it without permission prompts).
+        # handoffDir: 'H:\\Deepseekstudio\\workspace2\\dsh-context-keeper\\handoff'

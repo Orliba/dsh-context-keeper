@@ -1,4 +1,4 @@
-# dsh-think-watch · 插件方案 v2
+# dsh-context-keeper · 插件方案 v2
 
 > 2026-10-28 晚修订。上一版（cot-warden-design.md）基于「检测浪费 → 降档/停轮」，
 > 被真实数据否掉。这一版换成「规则前置 + 事后对账」。
@@ -28,7 +28,7 @@
 
 ```js
 ctx.systemPrompt.section({
-  name: 'think-watch:budget',
+  name: 'context-keeper:budget',
   order: 2500,              // 排在工具说明之前、策略段之后
   text: '<渲染出来的规则文本>',
   interpolate: false,
@@ -92,7 +92,7 @@ ctx.systemPrompt.section({
 | 阶段 | 内容 | 依赖 | 可验证性 |
 |---|---|---|---|
 | **P1** | 规则段落插件（纯 host 侧，无 UI） | `systemPrompt.section()` | 装上前后的 `commit@` / `recommit` 对比 |
-| **P2** | 统计工具：`think_watch` 工具 + 指标落盘 | 已有 CLI 逻辑 | 会话内能问「我这轮想得怎么样」 |
+| **P2** | 统计工具：`session_steward` 工具 + 指标落盘 | 已有 CLI 逻辑 | 会话内能问「我这轮想得怎么样」 |
 | **P3** | 思考徽章（client 侧 React） | `conversation.chat.reasoning.body` | 界面上看得见 |
 
 **P1 就能产生价值**，P2/P3 是增强。

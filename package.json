@@ -1,7 +1,7 @@
 {
-  "name": "dsh-think-watch",
-  "version": "0.2.0",
-  "description": "Teach a DeepSeek Harness agent to reason well, and inspect what it actually thought. Host plugin plus an offline trace analyzer.",
+  "name": "dsh-context-keeper",
+  "version": "0.5.0",
+  "description": "Teach a DeepSeek Harness agent to reason well, watch its context budget, and hand off long sessions. Host plugin plus an offline trace analyzer.",
   "type": "module",
   "license": "MIT",
   "author": {
@@ -10,20 +10,23 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Orliba/dsh-think-watch.git"
+    "url": "git+https://github.com/Orliba/dsh-context-keeper.git"
   },
-  "homepage": "https://github.com/Orliba/dsh-think-watch#readme",
+  "homepage": "https://github.com/Orliba/dsh-context-keeper#readme",
   "bugs": {
-    "url": "https://github.com/Orliba/dsh-think-watch/issues"
+    "url": "https://github.com/Orliba/dsh-context-keeper/issues"
   },
   "bin": {
-    "think-watch": "./bin/cli.mjs"
+    "context-keeper": "./bin/cli.mjs"
   },
+  "main": "./plugin/index.mjs",
   "exports": {
-    ".": "./src/index.mjs",
+    ".": "./plugin/index.mjs",
     "./plugin": "./plugin/index.mjs",
+    "./client": "./plugin/client.js",
     "./metrics": "./src/metrics.mjs",
     "./session": "./src/session.mjs",
+    "./cli": "./src/index.mjs",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
   },
@@ -48,7 +51,12 @@
     "cot",
     "system-prompt",
     "analysis",
-    "observability"
+    "observability",
+    "context",
+    "context-budget",
+    "token",
+    "handoff",
+    "session"
   ],
   "dsh": {
     "engines": {
@@ -56,11 +64,15 @@
     },
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
     }
   },
   "scripts": {
     "start": "node bin/cli.mjs",
-    "check": "node --check bin/cli.mjs && node --check plugin/index.mjs && node --check plugin/rule.mjs"
+    "check": "node --check bin/cli.mjs && node --check plugin/index.mjs && node --check plugin/rule.mjs && node --check plugin/client.js && node --check src/session.mjs && node --check src/budget.mjs && node --check src/handoff.mjs",
+    "test": "node test/budget.test.mjs && node test/client-badge.test.mjs && node test/client-boot.test.mjs && node test/plugin.test.mjs && node test/activation.test.mjs && node test/handoff.test.mjs && node test/integration-commands.test.mjs && node test/e2e-prompt.test.mjs"
   },
   "dependencies": {}
 }

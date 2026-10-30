@@ -177,3 +177,184 @@ export function listSessions(root, { readdirSync, statSync, join } = {}) {
   }
   return out
 }
+
+/**
+ * Richer, single-pass read of a session file for context budget and handoff.
+ *
+ * `readSession()` only extracts reasoning records (it was built for the trace
+ * analyzer). A handoff needs the *whole* conversation shape: what the user
+ * asked, which files/commands were touched, which tool calls failed, what the
+ * last answer said, and any checkpoint that DSH already produced. This function
+ * folds the same decoded event stream once and returns all of it.
+ *
+ * Extraction rules that matter:
+ * - `user/message` carries only text blocks that matter to a handoff; media
+ *   blocks are ignored (their bytes live elsewhere, the handle is noise here).
+ * - Tool calls come from `tool/call` events, not from `assistant/message`
+ *   `tool-call` blocks: the same call appears in both, and counting both would
+ *   double every file/command.
+ * - `compaction/summary` already holds DSH's own 8-section distilled checkpoint;
+ *   reusing it is free multi-level distillation - we never recompute it.
+ *
+ * @param {string} path
+ * @returns {{
+ *   path: string, name: string, frames: number, failedFrames: number,
+ *   session: {id:string,cwd:string,agentPreset:string,createdAt:number}|null,
+ *   title: string,
+ *   requestContext: {provider:string,model:string,contextWindow:number}|null,
+ *   users: {seq:number,text:string}[],
+ *   assistantTexts: {seq:number,turn:number,step:number,text:string}[],
+ *   toolCalls: {seq:number,turn:number,step:number,callId:string,name:string,args:string,description:string}[],
+ *   toolResults: {seq:number,turn:number,step:number,callId:string,isError:boolean,text:string}[],
+ *   compactions: {seq:number,summary:string,shadowedSeqs:number[]}[],
+ *   records: import('./session.mjs').ReasoningRecord[],
+ *   turns: number, steps: number
+ * }}
+ */
+export function readSessionDetail(path) {
+  const buf = readFileSync(path)
+  const { text, frames, failed } = decodeSession(buf)
+  const lines = text.split('\n').filter((l) => l.trim() !== '')
+
+  const detail = {
+    path,
+    name: basename(path),
+    frames,
+    failedFrames: failed,
+    session: null,
+    title: '',
+    requestContext: null,
+    users: [],
+    assistantTexts: [],
+    toolCalls: [],
+    toolResults: [],
+    compactions: [],
+    records: [],
+    turns: 0,
+    steps: 0,
+  }
+
+  for (const line of lines) {
+    let event
+    try {
+      event = JSON.parse(line)
+    } catch {
+      continue
+    }
+    if (!event || typeof event !== 'object') continue
+    const seq = typeof event.seq === 'number' ? event.seq : 0
+    const data = event.data
+
+    switch (event.type) {
+      case 'session': {
+        // The session header is flat (fields on the event, not under data).
+        const s = data ?? event
+        detail.session = {
+          id: typeof s?.id === 'string' ? s.id : '',
+          cwd: typeof s?.cwd === 'string' ? s.cwd : '',
+          agentPreset: typeof s?.agentPreset === 'string' ? s.agentPreset : '',
+          createdAt: typeof s?.createdAt === 'number' ? s.createdAt : 0,
+        }
+        break
+      }
+      case 'session/title':
+        if (typeof data?.title === 'string' && data.title.trim() !== '') detail.title = data.title.trim()
+        break
+      case 'request/context':
+        if (data && typeof data.contextWindow === 'number') {
+          detail.requestContext = {
+            provider: typeof data.provider === 'string' ? data.provider : '',
+            model: typeof data.model === 'string' ? data.model : '',
+            contextWindow: data.contextWindow,
+          }
+        }
+        break
+      case 'user/message': {
+        const t = textOf(data?.content)
+        if (t !== '') detail.users.push({ seq, text: t })
+        break
+      }
+      case 'assistant/message': {
+        const turn = typeof data?.turn === 'number' ? data.turn : 0
+        const step = typeof data?.step === 'number' ? data.step : 0
+        detail.turns = Math.max(detail.turns, turn)
+        detail.steps++
+        const content = data?.message?.content
+        if (!Array.isArray(content)) break
+        let reasoning = ''
+        let answer = ''
+        for (const block of content) {
+          if (!block || typeof block !== 'object') continue
+          if (block.type === 'reasoning' && typeof block.text === 'string') reasoning += block.text
+          else if (block.type === 'text' && typeof block.text === 'string') answer += block.text
+        }
+        if (answer !== '') detail.assistantTexts.push({ seq, turn, step, text: answer })
+        if (reasoning !== '') {
+          const source = data?.message?.source ?? {}
+          detail.records.push({
+            seq,
+            turn,
+            step,
+            text: reasoning,
+            model: typeof source.model === 'string' ? source.model : '',
+            provider: typeof source.provider === 'string' ? source.provider : '',
+            outputTokens: typeof data?.usage?.outputTokens === 'number' ? data.usage.outputTokens : undefined,
+            thinkingMs: thinkingDuration(data?.stream),
+            toolCalls: 0,
+            textChars: answer.length,
+          })
+        }
+        break
+      }
+      case 'tool/call':
+        detail.toolCalls.push({
+          seq,
+          turn: typeof data?.turn === 'number' ? data.turn : 0,
+          step: typeof data?.step === 'number' ? data.step : 0,
+          callId: typeof data?.callId === 'string' ? data.callId : '',
+          name: typeof data?.name === 'string' ? data.name : '',
+          args: typeof data?.arguments === 'string' ? data.arguments : '',
+          description: typeof data?.description === 'string' ? data.description : '',
+        })
+        break
+      case 'tool/result':
+        detail.toolResults.push({
+          seq,
+          turn: typeof data?.turn === 'number' ? data.turn : 0,
+          step: typeof data?.step === 'number' ? data.step : 0,
+          callId: typeof data?.toolCallId === 'string' ? data.toolCallId : (typeof data?.message?.toolCallId === 'string' ? data.message.toolCallId : ''),
+          isError: data?.isError === true || data?.message?.isError === true,
+          text: textOf(data?.message?.content),
+        })
+        break
+      case 'compaction/summary':
+        detail.compactions.push({
+          seq,
+          summary: textOf(data?.summary),
+          shadowedSeqs: Array.isArray(data?.shadowedSeqs) ? data.shadowedSeqs : [],
+        })
+        break
+      default:
+        break
+    }
+  }
+
+  return detail
+}
+
+/**
+ * Join the text blocks of a content array. Non-text blocks (images, files,
+ * reasoning) contribute nothing: a handoff cites text and handles, not bytes.
+ * @param {unknown} content
+ * @returns {string}
+ */
+function textOf(content) {
+  if (!Array.isArray(content)) return ''
+  let out = ''
+  for (const block of content) {
+    if (block && typeof block === 'object' && block.type === 'text' && typeof block.text === 'string') {
+      out += block.text
+    }
+  }
+  return out
+}
